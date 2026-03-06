@@ -10,13 +10,16 @@
         .container { max-width: 400px; margin: 0 auto; background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1 { text-align: center; color: #333; margin-bottom: 20px; }
         .button { width: 100%; padding: 15px; margin: 10px 0; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        .small-btn { padding: 8px; font-size: 12px; }
         .start { background: #4CAF50; color: white; }
         .stop { background: #f44336; color: white; }
         .trip-type { background: #2196F3; color: white; }
+        .export { background: #FF9800; color: white; }
         .status { background: #e7e7e7; padding: 15px; border-radius: 5px; margin: 10px 0; text-align: center; }
         .trip-list { margin-top: 20px; }
         .trip-item { background: #f9f9f9; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 4px solid #2196F3; }
         .distance { font-weight: bold; color: #4CAF50; }
+        .summary { background: #e8f5e8; padding: 10px; border-radius: 5px; margin: 10px 0; font-size: 12px; }
         .hidden { display: none; }
     </style>
 </head>
@@ -35,6 +38,10 @@
             <button class="button trip-type" onclick="setTripType('private')">🏠 Private</button>
             <button class="button trip-type" onclick="setTripType('commute')">🔄 Commute</button>
         </div>
+        
+        <div class="summary" id="summary"></div>
+        
+        <button class="button export small-btn" onclick="exportToCSV()">📊 Export for Tax (CSV)</button>
         
         <div class="trip-list">
             <h3>Recent Trips:</h3>
@@ -106,6 +113,7 @@
             currentTrip = null;
             updateStatus('Ready to track');
             displayTrips();
+            updateSummary();
         }
         
         function calculateDistance(lat1, lng1, lat2, lng2) {
@@ -123,18 +131,77 @@
             const list = document.getElementById('tripList');
             list.innerHTML = trips.slice(0, 10).map(trip => {
                 const date = new Date(trip.startTime).toLocaleDateString();
+                const time = new Date(trip.startTime).toLocaleTimeString();
                 const typeIcon = trip.type === 'business' ? '🏢' : trip.type === 'private' ? '🏠' : '🔄';
                 return `
                     <div class="trip-item">
-                        ${typeIcon} ${trip.type} - ${date}
+                        ${typeIcon} ${trip.type} - ${date} ${time}
                         <div class="distance">${trip.distance.toFixed(2)} km</div>
                     </div>
                 `;
             }).join('');
         }
         
+        function updateSummary() {
+            const currentYear = new Date().getFullYear();
+            const yearTrips = trips.filter(trip => 
+                new Date(trip.startTime).getFullYear() === currentYear
+            );
+            
+            const businessKm = yearTrips
+                .filter(trip => trip.type === 'business')
+                .reduce((sum, trip) => sum + trip.distance, 0);
+            
+            const totalKm = yearTrips
+                .reduce((sum, trip) => sum + trip.distance, 0);
+            
+            document.getElementById('summary').innerHTML = `
+                <strong>${currentYear} Summary:</strong><br>
+                Business: ${businessKm.toFixed(1)} km<br>
+                Total: ${totalKm.toFixed(1)} km<br>
+                Trips: ${yearTrips.length}
+            `;
+        }
+        
+        function exportToCSV() {
+            if (trips.length === 0) {
+                alert('No trips to export');
+                return;
+            }
+            
+            // CSV headers for German tax requirements
+            let csv = 'Date,Start Time,End Time,Distance (km),Purpose,Start Coordinates,End Coordinates\n';
+            
+            trips.forEach(trip => {
+                const startDate = new Date(trip.startTime);
+                const endDate = new Date(trip.endTime);
+                
+                csv += [
+                    startDate.toLocaleDateString('de-DE'),
+                    startDate.toLocaleTimeString('de-DE'),
+                    endDate.toLocaleTimeString('de-DE'),
+                    trip.distance.toFixed(2),
+                    trip.type,
+                    `"${trip.startLat.toFixed(6)}, ${trip.startLng.toFixed(6)}"`,
+                    `"${trip.endLat.toFixed(6)}, ${trip.endLng.toFixed(6)}"`
+                ].join(',') + '\n';
+            });
+            
+            // Download CSV
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `fahrbuch_${new Date().getFullYear()}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
         // Load trips on startup
         displayTrips();
+        updateSummary();
     </script>
 </body>
 </html>
